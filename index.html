@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roundabout timing trainer — UK rules</title>
+<style>
+  :root{
+    --tarmac:#21252a; --tarmac-deep:#171a1e;
+    --paint:#e9ecee; --amber:#f5a524; --good:#3fbf72; --bad:#e5484d; --warn:#e8913c;
+    --text:#dfe4e8; --muted:#8b949c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--tarmac-deep);color:var(--text);
+    font-family:Helvetica,Arial,"Liberation Sans",sans-serif;font-size:15px;line-height:1.5;
+    -webkit-font-smoothing:antialiased}
+  .shell{max-width:1240px;margin:0 auto;padding:24px 20px 60px}
+  h1{font-size:26px;font-weight:700;letter-spacing:-0.01em;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 22px;max-width:66ch}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px;align-items:start}
+  @media (max-width:960px){.layout{grid-template-columns:1fr}}
+
+  .bar{display:flex;gap:8px;align-items:center;margin:0 0 9px;flex-wrap:wrap}
+  .bar .grow{flex:1}
+  .bar button{padding:8px 12px}
+  .bar .prime{background:var(--amber);color:#20160a;border-color:var(--amber)}
+  .bar .prime:hover:not(:disabled){background:#ffb63c}
+  .zoom{display:flex;align-items:center;gap:4px;background:#282d33;
+    border:1px solid #363c43;border-radius:7px;padding:3px 5px}
+  .zoom button{padding:3px 9px;font-size:16px;line-height:1.1}
+  .zoom .lab{font-size:12px;color:var(--muted);min-width:44px;text-align:center;
+    font-variant-numeric:tabular-nums}
+
+  .frame{position:relative;border-radius:10px;overflow:hidden;
+    border:1px solid #31373d;background:var(--tarmac)}
+  canvas{width:100%;height:auto;display:block;cursor:pointer;touch-action:pan-y}
+  canvas.dragging{cursor:grabbing}
+  .hint{color:var(--muted);font-size:13px;margin-top:8px}
+
+  /* the verdict sits on top of the roundabout, so the page stays short */
+  .result{position:absolute;display:none;overflow-y:auto;padding:14px 15px;
+    background:rgba(17,20,24,.94)}
+  .result.show{display:block}
+  .result.side{left:0;top:0;bottom:0;width:45%;border-right:1px solid #3d444c}
+  .result.bottom{left:0;right:0;bottom:0;max-height:64%;border-top:1px solid #3d444c}
+  .result .head{font-size:19px;font-weight:700;margin:0 0 3px}
+  .result .lede{font-size:13.5px;color:#c3cad1;margin:0 0 11px}
+  .result.good .head{color:var(--good)}
+  .result.bad  .head{color:var(--bad)}
+  .result.miss .head{color:var(--warn)}
+  .result .cap{font-size:12.5px;color:#9aa3ab;margin:12px 0 0}
+  .result .foot{display:flex;gap:7px;margin-top:9px}
+  .result .foot button{flex:1;padding:7px 9px;font-weight:400;font-size:13px}
+
+  .panel{display:flex;flex-direction:column;gap:14px}
+  .card{background:#282d33;border:1px solid #363c43;border-radius:10px;padding:14px 15px}
+  .card h2{font-size:13px;font-weight:700;color:var(--muted);margin:0 0 9px}
+
+  .brief{background:#1c3a5e;border-color:#2e5c8f}
+  .brief h2{color:#9fc2e8}
+  .brief .what{font-size:23px;font-weight:700;line-height:1.2;margin:0}
+  .brief .why{color:#bcd4ee;font-size:13.5px;margin:7px 0 0}
+  .runin{height:6px;background:#363c43;border-radius:3px;overflow:hidden;margin-top:11px}
+  .runin i{display:block;height:100%;width:0;background:var(--amber);border-radius:3px}
+  .runin.done i{background:var(--good)}
+
+  .row{display:flex;gap:7px}
+  .row button{flex:1}
+  button{font:inherit;font-weight:600;color:var(--text);background:#343a41;
+    border:1px solid #454c54;border-radius:7px;padding:9px 10px;cursor:pointer}
+  button:hover:not(:disabled){background:#3d444c}
+  button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  button[aria-pressed="true"]{background:#e9ecee;color:#1b1f23;border-color:#e9ecee}
+  button[aria-pressed="true"].late{background:#e8913c;color:#241505;border-color:#e8913c}
+  button:disabled{opacity:.4;cursor:default}
+  .key{font-size:11px;color:var(--muted);font-weight:400}
+  button[aria-pressed="true"] .key{color:#5b636b}
+
+  .go{width:100%;padding:16px;font-size:18px;font-weight:700;
+    background:var(--amber);color:#20160a;border-color:var(--amber)}
+  .go:hover:not(:disabled){background:#ffb63c}
+  .go.wait{background:#343a41;color:var(--muted);border-color:#454c54}
+  .go.armed{background:var(--good);color:#0f2419;border-color:var(--good)}
+  .go.armed:hover:not(:disabled){background:#57d189}
+
+  .checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+  .checks li{display:flex;gap:9px;font-size:13.5px;align-items:baseline}
+  .mark{font-weight:700;width:14px;flex:none}
+  .ok .mark{color:var(--good)} .no .mark{color:var(--bad)} .na .mark{color:var(--muted)}
+
+  .stats{display:flex;gap:20px}
+  .stat .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+  .stat .l{font-size:12px;color:var(--muted)}
+
+  details{border-top:1px solid #363c43;margin-top:24px;padding-top:14px}
+  summary{cursor:pointer;font-weight:600}
+  details p, details li{color:var(--muted);font-size:14px}
+  details ul{padding-left:20px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <h1>Roundabout timing trainer</h1>
+  <p class="sub">Each round starts with your car driving up the approach road. Pick your lane and indicator while you are still moving, the way you would in a real car. At the give-way line the only decision left is go or wait. On the roundabout, the signal button turns green when it is the right moment to indicate left.</p>
+
+  <div class="layout">
+    <div>
+      <div class="bar">
+        <button class="prime" id="nextTop">Next roundabout <span class="key">N</span></button>
+        <button id="retryTop">Retry this one <span class="key">R</span></button>
+        <span class="grow"></span>
+        <div class="zoom">
+          <button id="zOut" aria-label="Zoom out">&minus;</button>
+          <span class="lab" id="zLab">1.0&times;</span>
+          <button id="zIn" aria-label="Zoom in">+</button>
+          <button id="zFit" style="font-size:12px;padding:5px 8px">Fit</button>
+        </div>
+      </div>
+
+      <div class="frame">
+        <canvas id="road" width="860" height="700" aria-label="Top-down roundabout"></canvas>
+
+        <div class="result" id="result">
+          <p class="head" id="vHead"></p>
+          <p class="lede" id="vLede"></p>
+          <ul class="checks" id="checks"></ul>
+          <p class="cap" id="replayCap" style="display:none"></p>
+          <div class="foot" id="replayFoot" style="display:none">
+            <button id="rPlay">Pause replay</button>
+            <button id="rSave">Save image</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="hint">Keys: 1 / 2 lane · A S D indicator · Space or click the road to go · A again on the roundabout to signal left before your exit · N next, R retry · + &minus; or the zoom buttons, drag to pan.</p>
+    </div>
+
+    <div class="panel">
+      <div class="card brief">
+        <h2>Your instruction</h2>
+        <p class="what" id="brief">Turn left — 1st exit</p>
+        <p class="why" id="briefWhy">Set up before you reach the line.</p>
+        <div class="runin" id="runinBar"><i id="runinFill"></i></div>
+      </div>
+
+      <div class="card">
+        <h2>Lane on approach</h2>
+        <div class="row">
+          <button id="laneL" aria-pressed="false">Left lane <span class="key">1</span></button>
+          <button id="laneR" aria-pressed="false">Right lane <span class="key">2</span></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Indicator on approach</h2>
+        <div class="row">
+          <button id="sigL" aria-pressed="false">Left <span class="key">A</span></button>
+          <button id="sigN" aria-pressed="false">None <span class="key">S</span></button>
+          <button id="sigR" aria-pressed="false">Right <span class="key">D</span></button>
+        </div>
+      </div>
+
+      <button class="go" id="go">Go now</button>
+
+      <div class="card">
+        <h2>Traffic</h2>
+        <div class="row">
+          <button id="dLow" aria-pressed="false">Low</button>
+          <button id="dMed" aria-pressed="true">Medium</button>
+          <button id="dHigh" aria-pressed="false">High</button>
+        </div>
+        <h2 style="margin:13px 0 7px">Simulation speed</h2>
+        <input type="range" id="speed" min="40" max="150" value="100" step="5" style="width:100%">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:2px">
+          <span>Slower</span><span id="speedVal">1.00&times;</span><span>Faster</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="stats">
+          <div class="stat"><div class="n" id="statClean">0</div><div class="l">Clean</div></div>
+          <div class="stat"><div class="n" id="statMiss">0</div><div class="l">Missed</div></div>
+          <div class="stat"><div class="n" id="statTotal">0</div><div class="l">Attempts</div></div>
+          <div class="stat"><div class="n" id="statStreak">0</div><div class="l">Streak</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <details>
+    <summary>How a round runs</summary>
+    <ul>
+      <li><strong>On the approach.</strong> Your car drives up the road towards the line, slowing as it gets there. Choose lane and indicator now. The bar under your instruction shows the road left and turns green once you are set.</li>
+      <li><strong>Still clear as you arrive?</strong> Press go while you are moving and you carry on without stopping. That needs a bigger gap, because you commit early, but not stopping at a clear roundabout is the correct thing to do.</li>
+      <li><strong>At the line.</strong> If you do not commit, the car stops. You can still change lane and signal, but it is marked as setting up too late.</li>
+      <li><strong>On the roundabout.</strong> The button stays grey until you pass the exit before yours, then turns green: that is when the left signal goes on. Press it too soon and it is marked early.</li>
+    </ul>
+  </details>
+
+  <details>
+    <summary>What the other cars are telling you</summary>
+    <ul>
+      <li>Approaching with <strong>left</strong> on: taking the first exit it reaches. With <strong>right</strong> on: going most of the way round. No signal: straight over.</li>
+      <li>On the roundabout with <strong>left</strong> on: it has passed the exit before yours and is leaving at the next one. If it leaves before it reaches your entry, it is not a threat.</li>
+      <li>On the roundabout with <strong>right</strong> on, or no signal: it is carrying on past your entry. Wait.</li>
+    </ul>
+    <p>Waiting for an empty roundabout is not the skill. Reading which cars will actually cross your entry is.</p>
+  </details>
+
+  <details>
+    <summary>The rules you are marked against</summary>
+    <ul>
+      <li>Give way to traffic from your right already on the roundabout. Keep moving if the way is clear.</li>
+      <li>Also hold back for a car waiting at the exit on your right (3 o'clock) that is signalling right or showing no signal. It is about to join and carry on round, straight across your entry.</li>
+      <li>1st exit, turning left: left lane, signal left on approach, keep it on.</li>
+      <li>2nd exit, straight ahead: left lane, no signal on approach, signal left after passing the 1st exit.</li>
+      <li>3rd exit, turning right: right lane, signal right on approach, change to left after passing the 2nd exit.</li>
+      <li>Lane and signal go on in good time, on the approach, not at the line.</li>
+      <li>Sitting through a safe gap is undue hesitation and is a fault here, same as on test.</li>
+    </ul>
+    <p>This trains gap judgement and the signalling sequence. It is not a substitute for lessons with an approved driving instructor.</p>
+  </details>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+const cv = document.getElementById('road');
+const ctx = cv.getContext('2d');
+const W = 860, H = 700, CX = 430, CY = 300;
+const R = 122, HALF = 46;
+const R_OUT = R + 22, R_IN = R - 22;
+const ARMW = 92;
+const GIVEWAY = R + HALF + 22;   // car nose sits on the give-way line, not over it
+const LANE_L = 34, LANE_R = 12, LANE_DIV = 23;  // offsets from the arm centreline
+const ENTRY = 90;
+const D2R = Math.PI / 180;
+
+// one speed scale for everything, so nothing jumps
+const RING_LINEAR   = 88;    // px/s all the way round the ring
+const TRAFFIC_CRUISE = 108;   // px/s on the approach roads
+const PLAYER_CRUISE  = 62;   // px/s, a little slower so there is time to set up
+const EXIT_ACCEL    = 55;    // px/s^2 once clear of the roundabout
+const BRAKE_ZONE    = 110;
+const RUN_IN        = 200;
+const MERGE_ARC     = 30;    // degrees of ring covered by the merge curve
+const SAFE_GAP  = 1.9;
+const MISS_HOLD = 4.5;
+const MISS_COUNT = 3;
+const STALL_LIMIT = 9;
+const SIG_WINDOW = 105;      // degrees before your exit when the left signal is due
+const CAR_LEN = 32, CAR_WID = 17;
+const NOSE_GAP = 14;         // clear tarmac left between one bumper and the next
+
+// degrees per second for a given running radius, so linear speed is constant
+const degPerSec = r => RING_LINEAR / (r * D2R);
+
+const EXITS = [
+  { n:1, angle:180, head:'Turn left',      ord:'1st exit', lane:'left',  signal:'left'  },
+  { n:2, angle:270, head:'Straight ahead', ord:'2nd exit', lane:'left',  signal:'none'  },
+  { n:3, angle:0,   head:'Turn right',     ord:'3rd exit', lane:'right', signal:'right' }
+];
+
+const cw = (from, to) => ((to - from) % 360 + 360) % 360;
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const ringPt = (a, r) => ({ x: CX + Math.cos(a*D2R)*r, y: CY + Math.sin(a*D2R)*r });
+
+function armPt(theta, dist, entering, off){
+  const o = (off === undefined) ? LANE_DIV : off;
+  const c = Math.cos(theta*D2R), s = Math.sin(theta*D2R);
+  const ox = entering ? -s :  s, oy = entering ? c : -c;
+  return { x: CX + c*dist + ox*o, y: CY + s*dist + oy*o };
+}
+function lineX(p, d, q, e){
+  const den = d.x*e.y - d.y*e.x;
+  if (Math.abs(den) < 1e-6) return { x:(p.x+q.x)/2, y:(p.y+q.y)/2 };
+  const t = ((q.x-p.x)*e.y - (q.y-p.y)*e.x)/den;
+  return { x:p.x + d.x*t, y:p.y + d.y*t };
+}
+const bez = (a,b,c,t) => { const u=1-t; return {
+  x:u*u*a.x + 2*u*t*b.x + t*t*c.x, y:u*u*a.y + 2*u*t*b.y + t*t*c.y }; };
+const bezHead = (a,b,c,t) => { const u=1-t;
+  return Math.atan2(2*u*(b.y-a.y)+2*t*(c.y-b.y), 2*u*(b.x-a.x)+2*t*(c.x-b.x)); };
+function bezLen(m){
+  let len = 0, prev = m[0];
+  for (let i = 1; i <= 16; i++){
+    const q = bez(m[0],m[1],m[2],i/16);
+    len += Math.hypot(q.x-prev.x, q.y-prev.y); prev = q;
+  }
+  return len;
+}
+
+function mergePath(theta, r, off){
+  const P0 = armPt(theta, GIVEWAY, true, off);
+  const a2 = theta + MERGE_ARC, P2 = ringPt(a2, r);
+  const dIn = { x:-Math.cos(theta*D2R), y:-Math.sin(theta*D2R) };
+  const tan = { x:-Math.sin(a2*D2R),   y: Math.cos(a2*D2R) };
+  return [P0, lineX(P0, dIn, P2, tan), P2];
+}
+function divergePath(theta, r){
+  const a1 = theta - MERGE_ARC, P0 = ringPt(a1, r);
+  const tan  = { x:-Math.sin(a1*D2R), y: Math.cos(a1*D2R) };
+  const P2 = armPt(theta, R + HALF + 50, false);
+  const dOut = { x: Math.cos(theta*D2R), y: Math.sin(theta*D2R) };
+  return [P0, lineX(P0, tan, P2, dOut), P2];
+}
+
+// progress along a merge curve: starts at whatever speed you arrived with (a),
+// finishes at ring speed. a = 0 means pulling away from a standstill.
+const ease = (mt, a) => mt*(a + (1-a)*mt);
+const mergeTime = (len, a) => (2 - a) * len / RING_LINEAR;
+
+// ---------- traffic ----------
+const PALETTE = [
+  { name:'red', c:'#e5484d' }, { name:'blue', c:'#4c8dff' },
+  { name:'yellow', c:'#f0c33c' }, { name:'green', c:'#43b97f' }
+];
+const SPAWN_ARMS = [0, 180, 270];
+const DENSITY = {
+  low:    { min: 2.6, span: 2.0, cap: 5,  merge: 3.2 },
+  medium: { min: 1.2, span: 1.4, cap: 10, merge: 2.7 },
+  high:   { min: 0.4, span: 0.6, cap: 16, merge: 2.2 }
+};
+let density = DENSITY.medium;
+const CAR_GAP = 44;            // nose-to-tail spacing in a queue
+// (how big a gap a car needs to pull out now varies with traffic — see DENSITY)
+const ENTERING_EXTRA = 1.4;    // extra margin for cars about to join from your right
+const spawnDist = theta => (theta === 0 || theta === 180) ? 520 : 440;
+
+let cars = [], nextSpawn = 0.3;
+
+// the furthest-back car already queueing in this lane of this arm
+function queueBack(theta, off){
+  let back = -Infinity;
+  for (const c of cars){
+    if (c.phase !== 'approach' || c.theta !== theta) continue;
+    if (Math.abs(c.off - off) > 16) continue;        // other lane, own queue
+    if (c.dist > back) back = c.dist;
+  }
+  return back;
+}
+
+function spawnCar(){
+  const theta = SPAWN_ARMS[(Math.random()*SPAWN_ARMS.length)|0];
+  const sd = spawnDist(theta);
+  const travel = [90,180,270][(Math.random()*3)|0];
+  const rEntry = travel === 270 ? R_IN : R_OUT;      // right lane only for the 3rd exit
+  const off = travel === 270 ? LANE_R : LANE_L;
+  // join the back of the queue, never in the middle of it — this is what used to
+  // drop a new car straight on top of one already waiting
+  const back = queueBack(theta, off);
+  const dist = Math.max(sd, back + CAR_LEN + NOSE_GAP + 16);
+  if (dist > sd + 320) return;                       // that lane is full, try again later
+  const m = mergePath(theta, rEntry, off);
+  cars.push({ phase:'approach', theta, dist, travel, rEntry, off,
+    a: theta, done: 0, mt: 0, outK: 0, v: TRAFFIC_CRUISE, ea: 0,
+    speed: degPerSec(rEntry), merge: m, mLen: bezLen(m), mTime: 1,
+    col: PALETTE[(Math.random()*PALETTE.length)|0], flash: 0, blink: Math.random() });
+}
+
+const onRing = c => c.phase === 'merge' || c.phase === 'ring';
+
+// Everything that has to be given room: the traffic, plus your own car once it is
+// committed. Without this the traffic pulled out straight through you.
+let AG = cars;
+const playerLive = () => state === 'merge' || state === 'ring' || state === 'diverge'
+  || state === 'leave' || (state === 'approach' && committed);
+function refreshAgents(){
+  if (!playerLive()){ AG = cars; return; }
+  p.phase = state; p.theta = ENTRY; p.exitAngle = target.angle;
+  AG = cars.concat([p]);
+}
+
+// The car immediately in front in this lane of this arm — the nearest one ahead,
+// not the one at the head of the queue. Following the head of the queue is what
+// let the third car in a line drive up onto the back of the second.
+function queueAhead(c){
+  let best = -Infinity;
+  for (const o of cars){
+    if (o === c || o.phase !== 'approach' || o.theta !== c.theta) continue;
+    if (Math.abs(o.off - c.off) > 16) continue;   // the other lane can sit alongside
+    if (o.dist < c.dist && o.dist > best) best = o.dist;
+  }
+  return best;
+}
+
+// A car that has just pulled out is still sitting in the mouth of its own entry.
+// The one behind it has to hold back rather than drive into it — this is what put
+// two cars in the same place at the give-way line.
+function mouthHold(c){
+  const start = c.merge[0];
+  let hold = 0;
+  for (const o of AG){
+    if (o === c || o.phase !== 'merge' || !o.merge) continue;
+    if (o.theta !== c.theta || Math.abs(o.off - c.off) > 16) continue;
+    const q = bez(o.merge[0], o.merge[1], o.merge[2], ease(Math.min(1, o.mt), o.ea));
+    const d = Math.hypot(q.x - start.x, q.y - start.y);
+    if (d < CAR_LEN + NOSE_GAP) hold = Math.max(hold, CAR_LEN + NOSE_GAP - d);
+  }
+  return hold;
+}
+
+// Road actually in front of a car that is on a curve, where comparing ring angles
+// tells you very little: on the way in, and again on the way out.
+function headwayAt(q, h, self){
+  const fx = Math.cos(h), fy = Math.sin(h);
+  let best = Infinity;
+  for (const o of AG){
+    if (o === self) continue;
+    let r = null;
+    if (o.phase === 'merge' && o.merge) r = bez(o.merge[0], o.merge[1], o.merge[2], ease(Math.min(1, o.mt), o.ea));
+    else if (o.phase === 'ring') r = ringPt(o.a, runRadius(o));
+    else if (o.phase === 'diverge' && o.diverge && o.mt < 0.8) r = exitPoint(o);
+    if (!r) continue;
+    const dx = r.x - q.x, dy = r.y - q.y;
+    const along = dx*fx + dy*fy;
+    const across = Math.abs(dy*fx - dx*fy);
+    if (along > 0 && across < CAR_WID + 6) best = Math.min(best, along);
+  }
+  return best;
+}
+const gapFactor = (g, floor) =>
+  isFinite(g) ? Math.max(floor, clamp01((g - CAR_LEN) / 26)) : 1;
+
+function mergeHeadway(e){
+  const m = e.merge;
+  if (!m) return Infinity;
+  const t = ease(Math.min(1, e.mt), e.ea);
+  return headwayAt(bez(m[0], m[1], m[2], t), bezHead(m[0], m[1], m[2], t), e);
+}
+function divergeHeadway(e){
+  const m = e.diverge;
+  if (!m) return Infinity;
+  const t = Math.min(1, e.mt);
+  // only while still crossing the ring; once out on the arm the ring is behind
+  if (t > 0.75) return Infinity;
+  return headwayAt(bez(m[0], m[1], m[2], t), bezHead(m[0], m[1], m[2], t), e);
+}
+function ringHeadway(e){
+  const r = runRadius(e);
+  return headwayAt(ringPt(e.a, r), (e.a + 90)*D2R, e);
+}
+const ringFactor    = (e, floor) => gapFactor(ringHeadway(e), floor);
+const mergeFactor   = (e, floor) => gapFactor(mergeHeadway(e), floor);
+const divergeFactor = (e, floor) => gapFactor(divergeHeadway(e), floor);
+
+// --- keeping cars off each other's back bumper on the ring ---
+// the least angle that still leaves clear tarmac between two cars at radius r
+const minRingGap = r => (CAR_LEN + NOSE_GAP) / (r * D2R);
+
+function ringAhead(e){
+  const re = runRadius(e);
+  let best = Infinity;
+  for (const o of AG){
+    if (o === e || !onRing(o)) continue;
+    if (Math.abs(runRadius(o) - re) > 24) continue;   // running the other line
+    const d = cw(e.a, o.a);
+    if (d > 0.1 && d < best) best = d;
+  }
+  return best;
+}
+// 1 = clear road ahead, 0 = nose to tail. Never quite 0 so a busy ring still creeps.
+function followFactor(e, floor){
+  const min = minRingGap(runRadius(e));
+  const d = ringAhead(e);
+  if (!isFinite(d) || d > min*2.4) return 1;
+  return Math.max(floor, clamp01((d - min) / (min*1.4)));
+}
+
+// Cars that joined on the inner line drift out to the outer line once they pass
+// the exit before their own, which is exactly when the left indicator goes on.
+// k2 holds the move off until the merge curve is finished so nothing snaps.
+const LANE_CHANGE_TIME = 1.3;   // seconds to move from the inner line to the outer line
+
+function runRadius(e){
+  if (e.rEntry >= R_OUT) return R_OUT;
+  const k = clamp01(e.outK || 0);
+  return e.rEntry + (R_OUT - e.rEntry) * (k*k*(3-2*k));
+}
+// is the outer line beside this car free enough to move into?
+function outerClear(e, need){
+  for (const o of AG){
+    if (o === e || !onRing(o)) continue;
+    if (runRadius(o) < (R_IN + R_OUT)/2) continue;
+    const gapDeg = Math.abs(((o.a - e.a + 540) % 360) - 180);
+    if (gapDeg < need) return false;
+  }
+  return true;
+}
+// signal first, then check the outer line, then move over. If the outer line is
+// occupied the car stays where it is and leaves from the inner line instead —
+// it used to barge across regardless, which is what put cars on top of each other.
+function advanceLaneChange(e, dt){
+  if (e.rEntry >= R_OUT) return;
+  const rem = e.travel - e.done;
+  if (rem > 92 || e.done < MERGE_ARC + 8) return;   // not past the previous exit yet
+  const need = rem <= 46 ? 15 : 24;                 // closer to the exit, tighter is allowed
+  if (!outerClear(e, need)) return;
+  e.outK = Math.min(1, (e.outK || 0) + dt/LANE_CHANGE_TIME);
+}
+
+// degrees this car still has to run on the ring before it peels off for its exit
+const ringLeft = c => (c.travel - c.done) - MERGE_ARC;
+
+// cars already circulating only — used by traffic deciding whether to pull out
+function ringClear(angle, gap, ignore){
+  for (const c of AG){
+    if (c === ignore) continue;
+    // a car part way through peeling off at this exit is still across the mouth
+    if (c.phase === 'diverge'){
+      const off = Math.abs(((c.exitAngle - angle + 540) % 360) - 180);
+      if (off < 26 && c.mt < 0.7) return false;
+      continue;
+    }
+    if (!onRing(c)) continue;
+    const d = cw(c.a, angle);
+    if (d > ringLeft(c)) continue;
+    if (d / c.speed < gap) return false;
+  }
+  return true;
+}
+
+const MERGE_EST = 1.3;   // seconds a car takes to pull out onto the ring
+
+// When will this car be sitting on the ring at `angle`? Infinity if never.
+// Covers cars still on an approach arm, because a car waiting at 3 o'clock that
+// is going to carry on round will be across your entry seconds after it moves.
+function arrivalAt(c, angle){
+  if (onRing(c)){
+    const d = cw(c.a, angle);
+    return d > ringLeft(c) ? Infinity : d / c.speed;
+  }
+  if (c.phase !== 'approach') return Infinity;
+  const d = cw(c.theta, angle);
+  if (d <= MERGE_ARC || d > c.travel - MERGE_ARC) return Infinity;
+  let tLine;
+  if (c.dist > GIVEWAY + 0.5) tLine = (c.dist - GIVEWAY) / Math.max(25, c.v);
+  else if (ringClear(c.theta, density.merge, c)) tLine = 0;
+  else return Infinity;                       // it is held at its own line
+  return tLine + MERGE_EST + (d - MERGE_ARC) / degPerSec(c.rEntry);
+}
+const needed = (c, gap) => onRing(c) ? gap : gap + ENTERING_EXTRA;
+
+function clearAt(angle, gap, ignore){
+  for (const c of cars){
+    if (c === ignore) continue;
+    if (arrivalAt(c, angle) < needed(c, gap)) return false;
+  }
+  return true;
+}
+function threatAt(angle, gap){
+  let worst = null, best = Infinity;
+  for (const c of cars){
+    const t = arrivalAt(c, angle);
+    if (t < needed(c, gap) && t < best){ best = t; worst = c; }
+  }
+  return worst;
+}
+
+// nearest car ahead of this one on the same exit arm, so nobody drives out
+// through the back of the car in front
+function leaveAhead(e){
+  let best = Infinity;
+  for (const o of AG){
+    if (o === e || o.phase !== 'leave' || o.exitAngle !== e.exitAngle) continue;
+    if (o.dist > e.dist && o.dist < best) best = o.dist;
+  }
+  return best;
+}
+
+// where an agent is while it is peeling off or driving away
+function exitPoint(o){
+  if (o.phase === 'diverge' && o.diverge){
+    const m = o.diverge; return bez(m[0], m[1], m[2], Math.min(1, o.mt));
+  }
+  if (o.phase === 'leave') return armPt(o.exitAngle, o.dist, false);
+  return null;
+}
+// clear distance to whatever is in front of a car that is peeling off. The exit
+// road can be queued up, and a car must not pop out of the roundabout on top of it.
+function exitLeadGap(e){
+  const me = exitPoint(e);
+  if (!me) return Infinity;
+  const mr = Math.hypot(me.x - CX, me.y - CY);
+  const mine = AG.indexOf(e);
+  let best = Infinity;
+  for (let j = 0; j < AG.length; j++){
+    const o = AG[j];
+    if (o === e || o.exitAngle !== e.exitAngle) continue;
+    if (o.phase !== 'diverge' && o.phase !== 'leave') continue;
+    const q = exitPoint(o);
+    if (!q) continue;
+    const r = Math.hypot(q.x - CX, q.y - CY);
+    // further from the middle means further out of the roundabout, so in front.
+    // Dead level, the lower slot yields, so two cars never both hold their ground.
+    const ahead = r > mr + 0.5 || (r > mr - 0.5 && j < mine);
+    if (!ahead) continue;
+    best = Math.min(best, Math.hypot(q.x - me.x, q.y - me.y));
+  }
+  return best;
+}
+const exitFactor = (e, floor) => {
+  const g = exitLeadGap(e);
+  if (!isFinite(g)) return 1;
+  return Math.max(floor, clamp01((g - CAR_WID) / (CAR_LEN + NOSE_GAP - CAR_WID)));
+};
+
+let spawnHold = 0;   // set while you are stuck at the line, so a gap can form
+
+function updateCars(dt, blockEast){
+  nextSpawn -= dt;
+  if (spawnHold > 0) spawnHold -= dt;
+  if (nextSpawn <= 0){
+    nextSpawn = density.min + Math.random()*density.span;
+    if (cars.length < density.cap && spawnHold <= 0) spawnCar();
+  }
+  for (const c of cars){
+    if (c.flash > 0) c.flash -= dt;
+
+    if (c.phase === 'approach'){
+      const ahead = queueAhead(c);
+      const hold = mouthHold(c);
+      const stopAt = Math.max(GIVEWAY + hold, isFinite(ahead) ? ahead + CAR_LEN + NOSE_GAP : 0);
+      const d = c.dist - stopAt;
+      if (d > 0.5){
+        // slow for the roundabout, or for the car in front
+        c.v = d < 95 ? Math.max(14, TRAFFIC_CRUISE*(0.14 + 0.86*d/95)) : TRAFFIC_CRUISE;
+        c.dist = Math.max(stopAt, c.dist - c.v*dt);
+      } else if (c.dist <= GIVEWAY + 0.5 && hold <= 0
+                 && !(blockEast && c.theta === 0)
+                 && ringClear(c.theta, density.merge, c)){
+        c.phase = 'merge'; c.mt = 0;
+        c.ea = clamp01(c.v / RING_LINEAR);
+        c.mTime = mergeTime(c.mLen, c.ea);
+      } else {
+        c.v = Math.max(0, c.v - 150*dt);   // come to rest at the line
+      }
+    } else if (c.phase === 'merge'){
+      c.mt += dt / c.mTime * Math.min(followFactor(c, 0.08), mergeFactor(c, 0.04));
+      const k = ease(Math.min(1, c.mt), c.ea);
+      c.a = (c.theta + MERGE_ARC*k) % 360; c.done = MERGE_ARC*k;
+      if (c.mt >= 1){ c.phase = 'ring'; c.a = (c.theta + MERGE_ARC) % 360; c.done = MERGE_ARC; }
+    } else if (c.phase === 'ring'){
+      advanceLaneChange(c, dt);
+      c.speed = degPerSec(runRadius(c));
+      const step = c.speed * Math.min(followFactor(c, 0.08), ringFactor(c, 0.08)) * dt;
+      c.a = (c.a + step) % 360; c.done += step;
+      if (c.done >= c.travel - MERGE_ARC){
+        c.phase = 'diverge'; c.mt = 0;
+        c.exitAngle = (c.theta + c.travel) % 360;
+        c.diverge = divergePath(c.exitAngle, runRadius(c));
+        c.dTime = bezLen(c.diverge) / RING_LINEAR;
+      }
+    } else if (c.phase === 'diverge'){
+      c.mt += dt / c.dTime * Math.min(exitFactor(c, 0.06), divergeFactor(c, 0.06));
+      if (c.mt >= 1){ c.phase = 'leave'; c.dist = R + HALF + 50; c.v = RING_LINEAR; }
+    } else {
+      c.v += EXIT_ACCEL*dt;
+      const cap = leaveAhead(c) - (CAR_LEN + NOSE_GAP);
+      c.dist = Math.min(c.dist + c.v*dt, isFinite(cap) ? Math.max(c.dist, cap) : Infinity);
+    }
+  }
+  cars = cars.filter(c => !(c.phase === 'leave' && c.dist > 720));
+}
+
+function carPose(c){
+  if (c.phase === 'approach'){ const q = armPt(c.theta, c.dist, true, c.off); return { x:q.x, y:q.y, head:(c.theta+180)*D2R }; }
+  if (c.phase === 'merge'){ const t = ease(Math.min(1,c.mt), c.ea), m = c.merge, q = bez(m[0],m[1],m[2],t);
+    return { x:q.x, y:q.y, head:bezHead(m[0],m[1],m[2],t) }; }
+  if (c.phase === 'ring'){ const q = ringPt(c.a, runRadius(c)); return { x:q.x, y:q.y, head:(c.a+90)*D2R }; }
+  if (c.phase === 'diverge'){ const t = Math.min(1,c.mt), m = c.diverge, q = bez(m[0],m[1],m[2],t);
+    return { x:q.x, y:q.y, head:bezHead(m[0],m[1],m[2],t) }; }
+  const q = armPt(c.exitAngle, c.dist, false);
+  return { x:q.x, y:q.y, head:c.exitAngle*D2R };
+}
+function carIndicator(c){
+  if (c.phase === 'approach') return c.travel === 90 ? 'left' : c.travel === 270 ? 'right' : null;
+  if (onRing(c)) return (c.travel - c.done <= 90) ? 'left' : (c.travel === 270 ? 'right' : null);
+  if (c.phase === 'diverge') return 'left';
+  return null;   // clear of the roundabout, indicator self-cancels
+}
+
+// ---------- player ----------
+let target = EXITS[1];
+let lane = null, signal = null, lateLane = false, lateSignal = false;
+let state = 'approach';   // approach | waiting | merge | ring | diverge | leave | done
+let p = {};
+let committed = false, rolled = false;
+let gapTime = 0, gapWasOpen = false, missedGaps = 0, stallTime = 0, dryTime = 0;
+let outcome = null, threatName = null, threatSig = null, threatOn = null, missReason = null, exitSigRemaining = null;
+let stats = { clean:0, miss:0, total:0, streak:0 };
+
+// ---------- flight recorder ----------
+// Every round is taped at 20 frames a second so a missed gap can be played back.
+let rec = [], recAcc = 0, clock = 0, gaps = [], commitClock = null;
+
+function record(dt){
+  clock += dt; recAcc += dt;
+  if (recAcc < 0.05) return;
+  recAcc = 0;
+  const waiting = (state === 'approach' || state === 'waiting');
+  const pp = playerPose();
+  rec.push({
+    t: clock,
+    safe: waiting && ready() && clearAt(ENTRY, SAFE_GAP, null),
+    p: [pp.x, pp.y, pp.head, playerIndicator()],
+    c: cars.map(c => { const q = carPose(c); return [q.x, q.y, q.head, c.col.c, carIndicator(c)]; })
+  });
+  if (rec.length > 1200) rec.shift();
+}
+
+// ---------- view: zoom and pan ----------
+let zoom = 1, panX = 0, panY = 0;
+const ZOOM_MIN = 0.7, ZOOM_MAX = 2.4;
+const ANCHOR_X = CX, ANCHOR_Y = CY + 40;   // zoom about a point between the ring and your line
+let resultSide = 'side';
+
+function liveView(){
+  const s = zoom;
+  return { s, box: { x:0, y:0, w:W, h:H },
+           tx: ANCHOR_X*(1-s) + panX, ty: ANCHOR_Y*(1-s) + panY };
+}
+// when a round is over the map slides clear of the verdict card
+function doneView(){
+  const wx = CX - 235, wy = CY - 225, ww = 470, wh = 470;
+  const box = resultSide === 'side'
+    ? { x: W*0.46, y: 12, w: W*0.52, h: H - 24 }
+    : { x: 12, y: 10, w: W - 24, h: H*0.34 };
+  const s = Math.min(box.w/ww, box.h/wh);
+  return { s, box, tx: box.x + box.w/2 - (wx + ww/2)*s, ty: box.y + box.h/2 - (wy + wh/2)*s };
+}
+const view = () => state === 'done' ? doneView() : liveView();
+
+function setZoom(z, silent){
+  zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+  const lim = 190*Math.max(0, zoom - 0.9);
+  panX = Math.max(-lim, Math.min(lim, panX));
+  panY = Math.max(-lim, Math.min(lim, panY));
+  if (!silent) el('zLab').textContent = zoom.toFixed(1) + '\u00d7';
+}
+
+// ---------- replay ----------
+// The round plays back on the main canvas, so the verdict can sit on top of it
+// instead of taking another slab of page.
+let rFrames = [], rIdx = 0, rPlaying = false, rAcc = 0, rCap = '';
+
+function showReplay(from, to, caption){
+  rFrames = rec.filter(f => f.t >= from && f.t <= to);
+  const foot = el('replayFoot');
+  if (rFrames.length < 4){ rFrames = []; foot.style.display = 'none'; el('replayCap').style.display = 'none'; return; }
+  rIdx = 0; rAcc = 0; rPlaying = true; rCap = caption;
+  foot.style.display = 'flex';
+  el('replayCap').textContent = caption;
+  el('replayCap').style.display = 'block';
+  el('rPlay').textContent = 'Pause replay';
+}
+function stopReplay(){
+  rPlaying = false; rFrames = []; rCap = '';
+  el('replayFoot').style.display = 'none';
+  el('replayCap').style.display = 'none';
+}
+
+const el = id => document.getElementById(id);
+const goBtn = el('go'), verdict = el('result');
+const ready = () => !!(lane && signal);
+const onRoundabout = () => state === 'merge' || state === 'ring' || state === 'diverge';
+const remainingDeg = () => p.travel - p.done;
+const sigDue = () => onRoundabout() && remainingDeg() <= SIG_WINDOW;
+
+function newRound(keepTarget){
+  if (!keepTarget) target = EXITS[(Math.random()*EXITS.length)|0];
+  lane = null; signal = null; lateLane = false; lateSignal = false;
+  state = 'approach'; committed = false; rolled = false;
+  gapTime = 0; gapWasOpen = false; missedGaps = 0; stallTime = 0; dryTime = 0; spawnHold = 0;
+  rec = []; recAcc = 0; clock = 0; gaps = []; commitClock = null;
+  stopReplay();
+  outcome = null; threatName = null; threatSig = null; threatOn = null; missReason = null; exitSigRemaining = null;
+  const travel = cw(ENTRY, target.angle);
+  p = { travel, rEntry: R_OUT, off: LANE_DIV, a: ENTRY, done: 0, mt: 0, outK: 0,
+        dist: GIVEWAY + RUN_IN, v: PLAYER_CRUISE, flash: 0, speed: degPerSec(R_OUT),
+        merge: null, mLen: 1, mTime: 1, ea: 0, diverge: null, dTime: 1 };
+  el('brief').textContent = target.head + ' — ' + target.ord;
+  el('briefWhy').textContent = 'Set your lane and indicator before you reach the line.';
+  verdict.classList.remove('show','good','bad','miss','side','bottom');
+  sync();
+}
+
+function sync(){
+  el('laneL').setAttribute('aria-pressed', lane === 'left');
+  el('laneR').setAttribute('aria-pressed', lane === 'right');
+  el('sigL').setAttribute('aria-pressed', signal === 'left');
+  el('sigN').setAttribute('aria-pressed', signal === 'none');
+  el('sigR').setAttribute('aria-pressed', signal === 'right');
+  el('laneL').classList.toggle('late', lateLane); el('laneR').classList.toggle('late', lateLane);
+  ['sigL','sigN','sigR'].forEach(i => el(i).classList.toggle('late', lateSignal));
+  const editable = (state === 'approach' || state === 'waiting');
+  ['laneL','laneR','sigL','sigN','sigR'].forEach(i => el(i).disabled = !editable);
+
+  const bar = el('runinBar'), fill = el('runinFill');
+  if (state === 'approach') fill.style.width = (Math.max(0,(p.dist-GIVEWAY)/RUN_IN)*100).toFixed(0) + '%';
+  else if (editable) fill.style.width = '100%';
+  bar.classList.toggle('done', ready());
+
+  goBtn.classList.remove('wait','armed');
+  if (state === 'approach'){
+    goBtn.textContent = ready() ? 'Keep going, do not stop' : 'Set lane and indicator first';
+    goBtn.disabled = !ready();
+  } else if (state === 'waiting'){
+    goBtn.textContent = ready() ? 'Go now' : 'Set lane and indicator first';
+    goBtn.disabled = !ready();
+  } else if (state === 'done'){
+    goBtn.textContent = 'Go now'; goBtn.disabled = true;
+  } else if (onRoundabout()){
+    if (exitSigRemaining !== null || target.n === 1){
+      goBtn.textContent = 'Left signal on'; goBtn.disabled = true; goBtn.classList.add('armed');
+    } else if (sigDue()){
+      goBtn.textContent = 'Signal left now'; goBtn.disabled = false; goBtn.classList.add('armed');
+    } else {
+      goBtn.textContent = 'Not yet — wait for your exit';
+      goBtn.disabled = false; goBtn.classList.add('wait');
+    }
+  } else {
+    goBtn.textContent = exitSigRemaining !== null ? 'Left signal on' : 'Signal left';
+    goBtn.disabled = true;
+  }
+}
+
+function setLane(v){
+  if (state !== 'approach' && state !== 'waiting') return;
+  lane = v; if (state === 'waiting') lateLane = true; sync();
+}
+function setSignal(v){
+  if (state !== 'approach' && state !== 'waiting') return;
+  signal = v; if (state === 'waiting') lateSignal = true; sync();
+}
+
+function etaToLine(){
+  if (state !== 'approach') return 0;
+  const d = p.dist - GIVEWAY;
+  if (committed) return d / PLAYER_CRUISE;
+  if (d <= BRAKE_ZONE) return d / (PLAYER_CRUISE*0.45);
+  return (d - BRAKE_ZONE)/PLAYER_CRUISE + BRAKE_ZONE/(PLAYER_CRUISE*0.45);
+}
+
+function startMerge(){
+  state = 'merge'; p.mt = 0;
+  p.rEntry = lane === 'right' ? R_IN : R_OUT;   // the lane you picked is the line you take
+  p.merge = mergePath(ENTRY, p.rEntry, p.off);
+  p.mLen = bezLen(p.merge);
+  p.speed = degPerSec(p.rEntry);
+  p.ea = clamp01(p.v / RING_LINEAR);
+  p.mTime = mergeTime(p.mLen, p.ea);
+  sync();
+}
+
+function go(){
+  if (!ready()) return;
+  if (state === 'approach'){
+    const threat = threatAt(ENTRY, SAFE_GAP + etaToLine());
+    committed = true; rolled = true; commitClock = clock;
+    if (threat){ outcome = 'wrong'; threatName = threat.col.name; threatSig = carIndicator(threat); threatOn = onRing(threat);
+                 threat.flash = 1.6; p.flash = 1.6; }
+    else outcome = 'correct';
+    sync(); return;
+  }
+  if (state !== 'waiting') return;
+  const threat = threatAt(ENTRY, SAFE_GAP);
+  commitClock = clock;
+  if (threat){ outcome = 'wrong'; threatName = threat.col.name; threatSig = carIndicator(threat); threatOn = onRing(threat);
+               threat.flash = 1.3; p.flash = 1.3; }
+  else outcome = 'correct';
+  startMerge();
+}
+
+function signalLeftNow(){
+  if (!onRoundabout() || exitSigRemaining !== null || target.n === 1) return;
+  exitSigRemaining = remainingDeg();
+  sync();
+}
+
+function missRound(reason){ outcome = 'missed'; missReason = reason; finish(); }
+
+function finish(){
+  state = 'done';
+  const ord = target.n === 1 ? '1st' : target.n === 2 ? '2nd' : '3rd';
+  const prevOrd = target.n === 2 ? '1st' : '2nd';
+  const items = [];
+
+  if (outcome === 'correct'){
+    items.push({ ok:true, text: rolled
+      ? 'Opportunity taken correctly, and you did not stop when the way was clear. That is what you want.'
+      : 'Opportunity taken correctly. Nothing on the roundabout was close enough to your right.' });
+  } else if (outcome === 'wrong'){
+    if (!threatOn){
+      items.push({ ok:false, text:'Wrong opportunity. The ' + threatName + ' car was waiting at the exit on your right, signalling ' +
+        (threatSig || 'nothing') + ', which means it was coming round past your entry. It would have been on top of you seconds after it pulled out.' });
+    } else {
+    const read = threatSig === 'left'
+      ? ' It was signalling left, but its exit was the one after yours, so it still had to cross your entry.'
+      : threatSig === 'right'
+        ? ' It was signalling right, which told you it was carrying on well past your entry.'
+        : ' It was showing no signal, which told you it was carrying on past your entry.';
+    items.push({ ok:false, text: (rolled
+      ? 'Wrong opportunity. You committed on the approach, but the ' + threatName + ' car reached your entry before you did. Committing early needs a bigger gap.'
+      : 'Wrong opportunity. The ' + threatName + ' car was already on the roundabout and heading for your entry. You pulled across it.') + read });
+    }
+  } else if (missReason === 'held'){
+    items.push({ ok:false, text:'Opportunity missed. The way was clear for ' + MISS_HOLD.toFixed(1) + ' seconds and you sat at the line.' });
+  } else if (missReason === 'count'){
+    items.push({ ok:false, text:'Opportunity missed. ' + MISS_COUNT + ' safe gaps opened and closed while you waited.' });
+  } else {
+    items.push({ ok:false, text:'Opportunity missed. You stopped at the line still deciding on lane or signal. That should have been settled on the approach.' });
+  }
+
+  const laneVal = lane === target.lane;
+  items.push({ ok: laneVal && !lateLane, text:
+    !laneVal ? 'Wrong lane. For ' + target.head.toLowerCase() + ' at the ' + ord + ' exit you approach in the ' + target.lane + ' lane.'
+    : lateLane ? 'Right lane, but you moved into it after stopping at the line. Lane choice happens on the approach.'
+    : 'Correct lane. The ' + target.lane + ' lane is right for the ' + ord + ' exit.' });
+
+  const sigVal = signal === target.signal;
+  items.push({ ok: sigVal && !lateSignal, text:
+    !sigVal ? (target.signal === 'none'
+        ? 'Wrong approach signal. Going straight ahead you give no signal on the approach.'
+        : 'Wrong approach signal. Signal ' + target.signal + ' on the approach for the ' + ord + ' exit.')
+    : lateSignal ? 'Right signal, but it went on at the line. Signal in good time on the approach so the traffic behind knows what you are doing.'
+    : 'Correct approach signal, set in good time.' });
+
+  if (outcome === 'missed'){
+    items.push({ na:true, text:'Exit signal not assessed — you never joined the roundabout.' });
+  } else if (target.n === 1){
+    items.push({ ok:true, text:'Left signal was already on from the approach. Correct, leave it on.' });
+  } else if (exitSigRemaining === null){
+    items.push({ ok:false, text:'You never signalled left before leaving. The button turns green once you pass the ' + prevOrd + ' exit — that is your cue.' });
+  } else if (exitSigRemaining > SIG_WINDOW){
+    items.push({ ok:false, text:'Left signal came on too early. That told the traffic at the ' + prevOrd + ' exit you were pulling off there.' });
+  } else {
+    items.push({ ok:true, text:'Left signal went on after you passed the ' + prevOrd + ' exit. Good timing.' });
+  }
+
+  const clean = items.every(i => i.ok);
+  stats.total++;
+  if (clean){ stats.clean++; stats.streak++; } else stats.streak = 0;
+  if (outcome === 'missed') stats.miss++;
+  el('statClean').textContent = stats.clean;
+  el('statMiss').textContent = stats.miss;
+  el('statTotal').textContent = stats.total;
+  el('statStreak').textContent = stats.streak;
+
+  let head, lede, cls;
+  if (outcome === 'wrong'){ head = 'Wrong opportunity'; cls = 'bad';
+    lede = 'A serious fault. Traffic already on the roundabout has priority.'; }
+  else if (outcome === 'missed'){ head = 'Missed the opportunity'; cls = 'miss';
+    lede = 'Undue hesitation. The gap was there and it was yours to take.'; }
+  else if (clean){ head = 'Took it correctly'; cls = 'good';
+    lede = 'Gap, lane and signals all right.'; }
+  else { head = 'Right moment, wrong setup'; cls = 'good';
+    lede = 'Your timing was safe. The faults below are lane and signalling.'; }
+
+  el('vHead').textContent = head;
+  el('vLede').textContent = lede;
+  el('checks').innerHTML = items.map(i =>
+    '<li class="' + (i.na ? 'na' : i.ok ? 'ok' : 'no') + '"><span class="mark">' +
+    (i.na ? '\u2013' : i.ok ? '\u2713' : '\u2717') + '</span><span>' + i.text + '</span></li>').join('');
+  verdict.classList.remove('good','bad','miss','side','bottom');
+  resultSide = cv.clientWidth >= 620 ? 'side' : 'bottom';
+  verdict.classList.add('show', cls, resultSide);
+  verdict.scrollTop = 0;
+
+  if (outcome === 'wrong' && commitClock !== null){
+    showReplay(commitClock - 2.2, commitClock + 3.2,
+      'The moment you went. Watch the quadrant between 3 o\'clock and your entry — the car that caught you is in it.');
+  } else if (outcome === 'missed' && missReason === 'held'){
+    showReplay(clock - gapTime - 1.6, clock,
+      'The gap you sat through. The band turns green the moment the way was clear, and it stayed green for ' +
+      gapTime.toFixed(1) + ' seconds.');
+  } else if (outcome === 'missed' && gaps.length){
+    const g = gaps.reduce((a,b) => b.len > a.len ? b : a);
+    showReplay(g.s - 1.6, g.e + 0.6,
+      'Your best gap: ' + g.len.toFixed(1) + ' seconds of clear road. The band turns green the moment you should have moved.');
+  } else {
+    stopReplay();
+  }
+  sync();
+}
+
+function updatePlayer(dt){
+  if (state === 'done') return;
+  if (p.flash > 0) p.flash -= dt;
+
+  if (state === 'approach'){
+    const d = p.dist - GIVEWAY;
+    if (committed) p.v = PLAYER_CRUISE;
+    else p.v = d < BRAKE_ZONE ? Math.max(9, PLAYER_CRUISE*(d/BRAKE_ZONE)) : PLAYER_CRUISE;
+    const want = lane === 'right' ? LANE_R : lane === 'left' ? LANE_L : LANE_DIV;
+    p.off += Math.max(-34*dt, Math.min(34*dt, want - p.off));
+    p.dist = Math.max(GIVEWAY, p.dist - p.v*dt);
+    if (p.dist <= GIVEWAY + 0.5){
+      p.dist = GIVEWAY;
+      if (committed) startMerge();
+      else { state = 'waiting'; sync(); }
+    } else sync();
+    return;
+  }
+
+  if (state === 'waiting'){
+    p.v = Math.max(0, p.v - 150*dt);
+    if (!ready()){
+      stallTime += dt;
+      if (stallTime > STALL_LIMIT) missRound('unready');
+      return;
+    }
+    const safe = clearAt(ENTRY, SAFE_GAP, null);
+    if (safe){
+      gapWasOpen = true; gapTime += dt;
+      dryTime = 0;
+      if (gapTime > MISS_HOLD) missRound('held');
+    } else {
+      // nothing has opened up for a while: stop feeding the queues so a real gap
+      // can form. You should never be marked down for a roundabout with no gap in it.
+      dryTime += dt;
+      if (dryTime > 5) spawnHold = 2.2;
+      if (gapWasOpen && gapTime > 1.2){
+        gaps.push({ s: clock - gapTime, e: clock, len: gapTime });
+        missedGaps++;
+        if (missedGaps >= MISS_COUNT){ missRound('count'); return; }
+      }
+      gapWasOpen = false; gapTime = 0;
+    }
+    return;
+  }
+
+  if (state === 'merge'){
+    p.mt += dt / p.mTime * Math.min(followFactor(p, 0.35), mergeFactor(p, 0.05));
+    const k = ease(Math.min(1, p.mt), p.ea);
+    p.a = (ENTRY + MERGE_ARC*k) % 360; p.done = MERGE_ARC*k;
+    if (p.mt >= 1){ state = 'ring'; p.a = (ENTRY + MERGE_ARC) % 360; p.done = MERGE_ARC; }
+    sync();
+  } else if (state === 'ring'){
+    advanceLaneChange(p, dt);
+    p.speed = degPerSec(runRadius(p));
+    const step = p.speed * Math.min(followFactor(p, 0.35), ringFactor(p, 0.3)) * dt;
+    p.a = (p.a + step) % 360; p.done += step;
+    if (p.done >= p.travel - MERGE_ARC){
+      state = 'diverge'; p.mt = 0;
+      p.diverge = divergePath(target.angle, runRadius(p));
+      p.dTime = bezLen(p.diverge) / RING_LINEAR;
+    }
+    sync();
+  } else if (state === 'diverge'){
+    p.mt += dt / p.dTime * Math.min(exitFactor(p, 0.25), divergeFactor(p, 0.25));
+    p.done = p.travel - MERGE_ARC*(1 - Math.min(1, p.mt));
+    if (p.mt >= 1){ state = 'leave'; p.dist = R + HALF + 50; p.v = RING_LINEAR; sync(); }
+  } else if (state === 'leave'){
+    p.v += EXIT_ACCEL*dt;
+    const cap = leaveAhead(p) - (CAR_LEN + NOSE_GAP);
+    p.dist = Math.min(p.dist + p.v*dt, isFinite(cap) ? Math.max(p.dist, cap) : Infinity);
+    if (p.dist > R + HALF + 200) finish();
+  }
+}
+
+function playerPose(){
+  if (state === 'approach' || state === 'waiting'){
+    const q = armPt(ENTRY, p.dist, true, p.off);
+    return { x:q.x, y:q.y, head:(ENTRY+180)*D2R };
+  }
+  if (state === 'merge'){ const t = ease(Math.min(1,p.mt), p.ea), m = p.merge, q = bez(m[0],m[1],m[2],t);
+    return { x:q.x, y:q.y, head:bezHead(m[0],m[1],m[2],t) }; }
+  if (state === 'ring'){ const q = ringPt(p.a, runRadius(p)); return { x:q.x, y:q.y, head:(p.a+90)*D2R }; }
+  if (state === 'diverge'){ const t = Math.min(1,p.mt), m = p.diverge, q = bez(m[0],m[1],m[2],t);
+    return { x:q.x, y:q.y, head:bezHead(m[0],m[1],m[2],t) }; }
+  const q = armPt(target.angle, p.dist, false);
+  return { x:q.x, y:q.y, head:target.angle*D2R };
+}
+function playerIndicator(){
+  if (state === 'approach' || state === 'waiting') return (!signal || signal === 'none') ? null : signal;
+  if (onRoundabout()){
+    if (exitSigRemaining !== null || target.n === 1) return 'left';
+    return signal === 'right' ? 'right' : null;
+  }
+  return 'left';
+}
+
+// ---------- drawing ----------
+function roundRect(x,y,w,h,r){
+  ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+let curView = { s:1, tx:0, ty:0, box:{ x:0, y:0, w:W, h:H } };
+function pill(x, y, text, active){
+  ctx.font = '600 14px Helvetica,Arial,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 22;
+  // keep the label on screen whatever the zoom, so an exit is never unlabelled
+  const v = curView, hw = w/2 + 6;
+  const x0 = (v.box.x - v.tx)/v.s + hw, x1 = (v.box.x + v.box.w - v.tx)/v.s - hw;
+  const y0 = (v.box.y - v.ty)/v.s + 20, y1 = (v.box.y + v.box.h - v.ty)/v.s - 20;
+  if (x1 > x0) x = Math.max(x0, Math.min(x1, x));
+  if (y1 > y0) y = Math.max(y0, Math.min(y1, y));
+  ctx.fillStyle = active ? '#3fbf72' : 'rgba(20,24,28,.72)';
+  roundRect(x-w/2, y-14, w, 28, 14); ctx.fill();
+  if (!active){ ctx.strokeStyle = '#4a5158'; ctx.lineWidth = 1; ctx.stroke(); }
+  ctx.fillStyle = active ? '#0f2419' : '#c3cad1';
+  ctx.fillText(text, x, y+1);
+}
+
+function drawRoad(){
+  ctx.fillStyle = '#21252a'; ctx.fillRect(-900,-900, W+1800, H+1800);
+  const arms = {
+    90:[CX-ARMW/2, CY+R-30, ARMW, H-(CY+R-30)],
+    270:[CX-ARMW/2, 0, ARMW, CY-R+30],
+    0:[CX+R-30, CY-ARMW/2, W-(CX+R-30), ARMW],
+    180:[0, CY-ARMW/2, CX-R+30, ARMW]
+  };
+  ctx.fillStyle = '#3b4147';
+  for (const k in arms) ctx.fillRect.apply(ctx, arms[k]);
+  ctx.fillStyle = 'rgba(63,191,114,.13)';
+  ctx.fillRect.apply(ctx, arms[target.angle]);
+
+  ctx.strokeStyle = '#3b4147'; ctx.lineWidth = HALF*2;
+  ctx.beginPath(); ctx.arc(CX,CY,R,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle = '#2f6b46';
+  ctx.beginPath(); ctx.arc(CX,CY,R-HALF,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#e9ecee'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(CX,CY,R-HALF+2,0,Math.PI*2); ctx.stroke();
+
+  ctx.strokeStyle = '#9aa3ab'; ctx.lineWidth = 2; ctx.setLineDash([14,14]);
+  ctx.beginPath();
+  ctx.moveTo(CX, CY+R+HALF); ctx.lineTo(CX, H);
+  ctx.moveTo(CX, CY-R-HALF); ctx.lineTo(CX, 0);
+  ctx.moveTo(CX+R+HALF, CY); ctx.lineTo(W, CY);
+  ctx.moveTo(CX-R-HALF, CY); ctx.lineTo(0, CY);
+  ctx.stroke(); ctx.setLineDash([]);
+
+  ctx.strokeStyle = '#e9ecee'; ctx.lineWidth = 6; ctx.setLineDash([11,9]);
+  const gw = R + HALF + 4;
+  ctx.beginPath();
+  ctx.moveTo(CX-ARMW/2, CY+gw); ctx.lineTo(CX, CY+gw);
+  ctx.moveTo(CX+ARMW/2, CY-gw); ctx.lineTo(CX, CY-gw);
+  ctx.moveTo(CX+gw, CY+ARMW/2); ctx.lineTo(CX+gw, CY);
+  ctx.moveTo(CX-gw, CY-ARMW/2); ctx.lineTo(CX-gw, CY);
+  ctx.stroke(); ctx.setLineDash([]);
+
+  ctx.strokeStyle = '#e9ecee'; ctx.lineWidth = 2; ctx.setLineDash([10,10]);
+  ctx.beginPath();
+  for (const th of [0, 90, 180, 270]){
+    const a = armPt(th, GIVEWAY + 14, true, LANE_DIV), b = armPt(th, 640, true, LANE_DIV);
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+
+  pill(CX - R - HALF - 52, CY - 72, '1st exit · left',   target.angle === 180);
+  pill(CX + 112,           CY - R - HALF - 26, '2nd exit · ahead', target.angle === 270);
+  pill(CX + R + HALF + 56, CY + 72, '3rd exit · right',  target.angle === 0);
+}
+
+function drawCar(x, y, head, colour, indicator, isPlayer, flash, t, blink){
+  const L = 32, Wd = 17;
+  ctx.save(); ctx.translate(x,y); ctx.rotate(head);
+  if (flash > 0 && Math.floor(t*10)%2 === 0){
+    ctx.fillStyle = '#e5484d'; roundRect(-L/2-5,-Wd/2-5,L+10,Wd+10,8); ctx.fill();
+  }
+  ctx.fillStyle = colour; roundRect(-L/2,-Wd/2,L,Wd,4); ctx.fill();
+  ctx.strokeStyle = isPlayer ? '#1b1f23' : 'rgba(0,0,0,.4)';
+  ctx.lineWidth = isPlayer ? 2.5 : 1.5; ctx.stroke();
+  ctx.fillStyle = 'rgba(20,24,28,.45)'; roundRect(2,-Wd/2+3,8,Wd-6,2); ctx.fill();
+  // indicators: front and rear lamp on the side being signalled, own blink phase per car
+  if (indicator && Math.floor((t + blink)*2.4)%2 === 0){
+    const oy = indicator === 'left' ? -Wd/2 - 1 : Wd/2 - 4;
+    ctx.fillStyle = 'rgba(245,165,36,.35)';
+    ctx.fillRect(L/2-8, oy-2, 8, 9); ctx.fillRect(-L/2, oy-2, 8, 9);
+    ctx.fillStyle = '#ffb62e';
+    ctx.fillRect(L/2-7, oy, 6, 5); ctx.fillRect(-L/2+1, oy, 6, 5);
+  }
+  ctx.restore();
+}
+
+let bannerX = 20;
+function banner(tint, dot, label, sub){
+  const X = bannerX;
+  ctx.font = '600 15px Helvetica,Arial,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(label).width + (dot ? 46 : 28);
+  ctx.fillStyle = tint; roundRect(X, 20, w, 34, 8); ctx.fill();
+  let tx = X + 14;
+  if (dot){ ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(X+18, 37, 6, 0, Math.PI*2); ctx.fill(); tx = X + 32; }
+  ctx.fillStyle = '#dfe4e8'; ctx.fillText(label, tx, 38);
+  if (sub){ ctx.font = '13px Helvetica,Arial,sans-serif'; ctx.fillStyle = '#8b949c';
+    ctx.fillText(sub, X, 70); }
+}
+
+function drawStatus(){
+  const prevOrd = target.n === 2 ? '1st' : '2nd';
+  if (state === 'done'){
+    if (!rFrames.length) return;
+    const f = rFrames[rIdx];
+    if (!f) return;
+    banner(f.safe ? 'rgba(63,191,114,.16)' : 'rgba(229,72,77,.16)',
+      f.safe ? '#3fbf72' : '#e5484d',
+      f.safe ? 'Gap open — you could go' : 'Not clear', 'Replay');
+    return;
+  }
+  if (onRoundabout()){
+    if (target.n === 1 || exitSigRemaining !== null)
+      banner('rgba(63,191,114,.16)', '#3fbf72', 'Left signal on', null);
+    else if (sigDue())
+      banner('rgba(63,191,114,.16)', '#3fbf72', 'Signal left now', 'You have passed the ' + prevOrd + ' exit');
+    else
+      banner('rgba(20,24,28,.6)', '#8b949c', 'Not yet', 'Signal left once you pass the ' + prevOrd + ' exit');
+    return;
+  }
+  if (state === 'approach'){
+    if (!ready()){
+      banner('rgba(245,165,36,.16)', null, 'Set lane and indicator before the line',
+        etaToLine().toFixed(1) + 's of road left'); return;
+    }
+    if (committed){
+      banner('rgba(63,191,114,.16)', '#3fbf72', 'Going through without stopping', null); return;
+    }
+    const clear = clearAt(ENTRY, SAFE_GAP + etaToLine(), null);
+    banner(clear ? 'rgba(63,191,114,.16)' : 'rgba(229,72,77,.16)', clear ? '#3fbf72' : '#e5484d',
+      clear ? 'Still clear — you could keep going' : 'You will need to stop',
+      etaToLine().toFixed(1) + 's to the line');
+    return;
+  }
+  if (state !== 'waiting') return;
+  if (!ready()){
+    banner('rgba(229,72,77,.16)', null, 'Stopped at the line still deciding',
+      'Marked as a fault in ' + Math.max(0, STALL_LIMIT - stallTime).toFixed(1) + 's'); return;
+  }
+  const safe = clearAt(ENTRY, SAFE_GAP, null);
+  let sub = null;
+  if (gapTime > 1.5) sub = 'Gap held for ' + gapTime.toFixed(1) + 's';
+  else if (missedGaps > 0) sub = 'Gaps let go: ' + missedGaps + ' of ' + MISS_COUNT;
+  banner(safe ? 'rgba(63,191,114,.16)' : 'rgba(229,72,77,.16)', safe ? '#3fbf72' : '#e5484d',
+    safe ? 'Gap open' : 'Traffic from your right', sub);
+}
+
+let simSpeed = 1.0;
+let last = performance.now();
+function frame(now){
+  const real = Math.min(0.05, (now-last)/1000); last = now;
+  const dt = real * simSpeed;
+  const t = now/1000;
+  const done = (state === 'done');
+
+  if (!done){
+    refreshAgents();
+    updateCars(dt, onRoundabout() || (state === 'approach' && committed));
+    updatePlayer(dt);
+    if (state !== 'done') record(dt);
+  } else if (rFrames.length && rPlaying){
+    rAcc += real * simSpeed;
+    while (rAcc > 0.05){ rAcc -= 0.05; rIdx = (rIdx + 1) % rFrames.length; }
+  }
+
+  const v = view();
+  curView = v;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle = '#171a1e'; ctx.fillRect(0,0,W,H);
+  ctx.setTransform(v.s, 0, 0, v.s, v.tx, v.ty);
+  drawRoad();
+
+  if (state === 'done' && rFrames.length){
+    const f = rFrames[rIdx];
+    if (f){
+      // the quadrant you have to read: everything between 3 o'clock and your entry
+      ctx.strokeStyle = f.safe ? 'rgba(63,191,114,.22)' : 'rgba(229,72,77,.20)';
+      ctx.lineWidth = HALF*2;
+      ctx.beginPath(); ctx.arc(CX, CY, R, -18*D2R, 90*D2R); ctx.stroke();
+      for (const c of f.c) drawCar(c[0],c[1],c[2],c[3],c[4],false,0,t,0);
+      drawCar(f.p[0],f.p[1],f.p[2],'#f2f4f6',f.p[3],true,0,t,0);
+    }
+  } else {
+    for (const c of cars){
+      const q = carPose(c);
+      drawCar(q.x, q.y, q.head, c.col.c, carIndicator(c), false, c.flash, t, c.blink);
+    }
+    if (state !== 'done'){
+      const q = playerPose();
+      drawCar(q.x, q.y, q.head, '#f2f4f6', playerIndicator(), true, p.flash, t, 0);
+    }
+  }
+
+  ctx.setTransform(1,0,0,1,0,0);
+  bannerX = (state === 'done' && resultSide === 'side') ? Math.round(W*0.46) + 14 : 20;
+  drawStatus();
+  requestAnimationFrame(frame);
+}
+
+el('laneL').onclick = () => setLane('left');
+el('laneR').onclick = () => setLane('right');
+el('sigL').onclick  = () => setSignal('left');
+el('sigN').onclick  = () => setSignal('none');
+el('sigR').onclick  = () => setSignal('right');
+goBtn.onclick = () => {
+  if (state === 'approach' || state === 'waiting') go(); else signalLeftNow();
+};
+el('rPlay').onclick = () => {
+  rPlaying = !rPlaying;
+  el('rPlay').textContent = rPlaying ? 'Pause replay' : 'Play replay';
+};
+el('rSave').onclick = () => {
+  const a = document.createElement('a');
+  a.download = 'roundabout-' + (outcome || 'round') + '.png';
+  a.href = cv.toDataURL('image/png');
+  a.click();
+};
+const fire = (ids, fn) => ids.forEach(i => el(i).addEventListener('click', e => {
+  e.currentTarget.blur();   // otherwise the space bar keeps re-pressing it
+  fn();
+}));
+fire(['nextTop'], () => newRound(false));
+fire(['retryTop'], () => newRound(true));
+fire(['zIn'],  () => setZoom(zoom + 0.2));
+fire(['zOut'], () => setZoom(zoom - 0.2));
+fire(['zFit'], () => { panX = panY = 0; setZoom(1); });
+
+// ctrl/cmd/shift + wheel zooms; a plain wheel still scrolls the page
+cv.addEventListener('wheel', e => {
+  if (!e.ctrlKey && !e.metaKey && !e.shiftKey) return;
+  e.preventDefault();
+  setZoom(zoom * (e.deltaY < 0 ? 1.1 : 1/1.1));
+}, { passive:false });
+
+let dragging = false, dragged = 0, lastX = 0, lastY = 0, ptr = null;
+cv.addEventListener('pointerdown', e => {
+  dragging = true; dragged = 0; ptr = e.pointerId;
+  lastX = e.clientX; lastY = e.clientY;
+  cv.setPointerCapture(ptr);
+});
+cv.addEventListener('pointermove', e => {
+  if (!dragging || e.pointerId !== ptr) return;
+  const k = W / cv.clientWidth;             // canvas pixels per screen pixel
+  const dx = (e.clientX - lastX)*k, dy = (e.clientY - lastY)*k;
+  lastX = e.clientX; lastY = e.clientY;
+  dragged += Math.abs(dx) + Math.abs(dy);
+  if (dragged > 8){
+    cv.classList.add('dragging');
+    panX += dx; panY += dy; setZoom(zoom, true);
+  }
+});
+function endDrag(e){
+  if (!dragging || (ptr !== null && e.pointerId !== ptr)) return;
+  dragging = false; cv.classList.remove('dragging');
+  if (ptr !== null && cv.hasPointerCapture(ptr)) cv.releasePointerCapture(ptr);
+  ptr = null;
+}
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+function setDensity(key){
+  density = DENSITY[key];
+  el('dLow').setAttribute('aria-pressed', key === 'low');
+  el('dMed').setAttribute('aria-pressed', key === 'medium');
+  el('dHigh').setAttribute('aria-pressed', key === 'high');
+}
+el('dLow').onclick  = () => setDensity('low');
+el('dMed').onclick  = () => setDensity('medium');
+el('dHigh').onclick = () => setDensity('high');
+
+el('speed').oninput = e => {
+  simSpeed = e.target.value/100;
+  el('speedVal').textContent = simSpeed.toFixed(2) + '\u00d7';
+};
+cv.onclick = () => {
+  if (dragged > 8) return;                  // that was a pan, not a press
+  if (state === 'approach' || state === 'waiting') go();
+  else if (state === 'done') newRound();
+  else signalLeftNow();
+};
+
+window.addEventListener('resize', () => {
+  if (state !== 'done') return;
+  const want = cv.clientWidth >= 620 ? 'side' : 'bottom';
+  if (want === resultSide) return;
+  verdict.classList.remove('side','bottom');
+  resultSide = want;
+  verdict.classList.add(resultSide);
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'n' || e.key === 'N'){ newRound(false); return; }
+  if (e.key === 'r' || e.key === 'R'){ newRound(true); return; }
+  if (e.key === '+' || e.key === '='){ setZoom(zoom + 0.2); return; }
+  if (e.key === '-' || e.key === '_'){ setZoom(zoom - 0.2); return; }
+  if (e.key === ' '){
+    e.preventDefault();
+    if (state === 'approach' || state === 'waiting') go();
+    else if (state === 'done') newRound();
+    else signalLeftNow();
+    return;
+  }
+  if (onRoundabout() && (e.key === 'a' || e.key === 'A')){ signalLeftNow(); return; }
+  if (state !== 'approach' && state !== 'waiting') return;
+  if (e.key === '1') setLane('left');
+  else if (e.key === '2') setLane('right');
+  else if (e.key === 'a' || e.key === 'A') setSignal('left');
+  else if (e.key === 's' || e.key === 'S') setSignal('none');
+  else if (e.key === 'd' || e.key === 'D') setSignal('right');
+});
+
+setZoom(1);
+newRound();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
