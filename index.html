@@ -19,7 +19,85 @@
   h1{font-size:26px;font-weight:700;letter-spacing:-0.01em;margin:0 0 4px}
   .sub{color:var(--muted);margin:0 0 22px;max-width:66ch}
   .layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px;align-items:start}
-  @media (max-width:960px){.layout{grid-template-columns:1fr}}
+  .lg{display:inline} .sm{display:none}
+
+  /* The map never grows past the height it can actually be shown at, so the
+     controls underneath stay on screen instead of being pushed off the bottom. */
+  .stage{max-width:100%}
+  @supports (height: 100svh){
+    .stage{max-width:min(100%, calc((100svh - 205px) * 1.23))}
+  }
+
+  /* tablets and narrow windows: one column, controls in a compact grid */
+  @media (max-width:1000px){
+    .layout{grid-template-columns:1fr}
+    .stage{margin:0 auto}
+    @supports (height: 100svh){
+      .stage{max-width:min(100%, calc((100svh - 330px) * 1.23))}
+    }
+    .panel{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+    .panel > .card.brief, .panel > .go, .panel > .card:nth-last-child(-n+2){grid-column:1 / -1}
+  }
+
+  /* short and wide, such as a phone on its side: back to map beside controls */
+  @media (max-height:600px) and (min-width:720px){
+    .shell{padding:10px 14px 30px}
+    h1{font-size:18px;margin-bottom:0}
+    .sub{display:none}
+    .hint{display:none}
+    .layout{grid-template-columns:minmax(0,1fr) 290px;gap:14px}
+    .panel{display:flex;flex-direction:column;gap:9px}
+    .card{padding:9px 11px}
+    .card h2{margin-bottom:6px}
+    .go{padding:12px;font-size:16px}
+    .stage{max-width:100%;margin:0}
+    @supports (height: 100svh){
+      .stage{max-width:min(100%, calc((100svh - 130px) * 1.23))}
+    }
+  }
+
+  /* phones */
+  @media (max-width:620px){
+    .shell{padding:12px 12px 36px}
+    h1{font-size:19px;letter-spacing:0;margin-bottom:2px}
+    .sub{display:none}
+    .hint{display:none}
+    .lg{display:none} .sm{display:inline}
+    .key{display:none}
+    .bar{gap:6px;margin-bottom:7px}
+    .bar button{padding:8px 10px;font-size:14px}
+    .zoom{padding:2px 4px}
+    .zoom .lab{min-width:36px;font-size:11px}
+    .card{padding:10px 11px}
+    .card h2{font-size:12px;margin-bottom:6px}
+    button{padding:9px 5px;font-size:13.5px}
+    .row{gap:5px}
+    .brief .what{font-size:17px}
+    .brief .why{font-size:12.5px;margin-top:5px}
+    .go{padding:13px;font-size:16px}
+    .stats{gap:12px;justify-content:space-between}
+    .stat .n{font-size:19px}
+    .layout{gap:14px}
+    .panel{gap:10px}
+    details{margin-top:18px}
+    @supports (height: 100svh){
+      .stage{max-width:min(100%, calc((100svh - 400px) * 1.23))}
+    }
+    /* the verdict needs the room more than the replay does on a small screen */
+    .result{padding:12px 13px}
+    .result.bottom{max-height:74%}
+    .result .head{font-size:17px}
+    .result .lede{font-size:12.5px;margin-bottom:9px}
+    .checks li{font-size:12.5px;gap:7px}
+  }
+
+  /* very narrow: let the lane and indicator rows have the full width each */
+  @media (max-width:380px){
+    .panel{grid-template-columns:1fr}
+    @supports (height: 100svh){
+      .stage{max-width:min(100%, calc((100svh - 430px) * 1.23))}
+    }
+  }
 
   .bar{display:flex;gap:8px;align-items:center;margin:0 0 9px;flex-wrap:wrap}
   .bar .grow{flex:1}
@@ -44,6 +122,9 @@
   .result.show{display:block}
   .result.side{left:0;top:0;bottom:0;width:45%;border-right:1px solid #3d444c}
   .result.bottom{left:0;right:0;bottom:0;max-height:64%;border-top:1px solid #3d444c}
+  /* on a phone there is no room to sit on top of the map, so it sits under it */
+  .result.below{position:static;max-height:none;background:transparent;
+    border-top:1px solid #3d444c;padding-top:13px}
   .result .head{font-size:19px;font-weight:700;margin:0 0 3px}
   .result .lede{font-size:13.5px;color:#c3cad1;margin:0 0 11px}
   .result.good .head{color:var(--good)}
@@ -105,10 +186,10 @@
   <p class="sub">Each round starts with your car driving up the approach road. Pick your lane and indicator while you are still moving, the way you would in a real car. At the give-way line the only decision left is go or wait. On the roundabout, the signal button turns green when it is the right moment to indicate left.</p>
 
   <div class="layout">
-    <div>
+    <div class="stage">
       <div class="bar">
-        <button class="prime" id="nextTop">Next roundabout <span class="key">N</span></button>
-        <button id="retryTop">Retry this one <span class="key">R</span></button>
+        <button class="prime" id="nextTop"><span class="lg">Next roundabout</span><span class="sm">Next</span> <span class="key">N</span></button>
+        <button id="retryTop"><span class="lg">Retry this one</span><span class="sm">Retry</span> <span class="key">R</span></button>
         <span class="grow"></span>
         <div class="zoom">
           <button id="zOut" aria-label="Zoom out">&minus;</button>
@@ -723,11 +804,33 @@ function liveView(){
            tx: ANCHOR_X*(1-s) + panX, ty: ANCHOR_Y*(1-s) + panY };
 }
 // when a round is over the map slides clear of the verdict card
+// which side of the map the verdict goes, given the room actually available
+function panelMode(){
+  if (window.matchMedia && window.matchMedia('(max-width:620px)').matches) return 'below';
+  return cv.clientWidth >= 560 ? 'side' : 'bottom';
+}
+// Measured from the card itself rather than guessed, so a long verdict and a
+// short one both leave the map as much room as there really is.
+let doneBox = { x: W*0.46, y: 12, w: W*0.52, h: H - 24 };
+function measurePanel(){
+  const card = el('result');
+  if (resultSide === 'below'){
+    doneBox = { x: 14, y: 14, w: W - 28, h: H - 28 };
+  } else if (resultSide === 'side'){
+    const cwid = cv.clientWidth || 1;
+    const frac = (card.offsetWidth || cwid*0.45) / cwid;
+    const x = W * Math.min(0.62, Math.max(0.18, frac)) + 12;
+    doneBox = { x, y: 12, w: Math.max(140, W - x - 12), h: H - 24 };
+  } else {
+    const chi = cv.clientHeight || 1;
+    const frac = (card.offsetHeight || chi*0.55) / chi;
+    const h = H * (1 - Math.min(0.82, Math.max(0.2, frac))) - 18;
+    doneBox = { x: 12, y: 10, w: W - 24, h: Math.max(90, h) };
+  }
+}
 function doneView(){
   const wx = CX - 235, wy = CY - 225, ww = 470, wh = 470;
-  const box = resultSide === 'side'
-    ? { x: W*0.46, y: 12, w: W*0.52, h: H - 24 }
-    : { x: 12, y: 10, w: W - 24, h: H*0.34 };
+  const box = doneBox;
   const s = Math.min(box.w/ww, box.h/wh);
   return { s, box, tx: box.x + box.w/2 - (wx + ww/2)*s, ty: box.y + box.h/2 - (wy + wh/2)*s };
 }
@@ -783,7 +886,7 @@ function newRound(keepTarget){
         merge: null, mLen: 1, mTime: 1, ea: 0, diverge: null, dTime: 1 };
   el('brief').textContent = target.head + ' — ' + target.ord;
   el('briefWhy').textContent = 'Set your lane and indicator before you reach the line.';
-  verdict.classList.remove('show','good','bad','miss','side','bottom');
+  verdict.classList.remove('show','good','bad','miss','side','bottom','below');
   sync();
 }
 
@@ -964,10 +1067,11 @@ function finish(){
   el('checks').innerHTML = items.map(i =>
     '<li class="' + (i.na ? 'na' : i.ok ? 'ok' : 'no') + '"><span class="mark">' +
     (i.na ? '\u2013' : i.ok ? '\u2713' : '\u2717') + '</span><span>' + i.text + '</span></li>').join('');
-  verdict.classList.remove('good','bad','miss','side','bottom');
-  resultSide = cv.clientWidth >= 620 ? 'side' : 'bottom';
+  verdict.classList.remove('good','bad','miss','side','bottom','below');
+  resultSide = panelMode();
   verdict.classList.add('show', cls, resultSide);
   verdict.scrollTop = 0;
+  measurePanel();
 
   if (outcome === 'wrong' && commitClock !== null){
     showReplay(commitClock - 2.2, commitClock + 3.2,
@@ -1286,7 +1390,7 @@ function frame(now){
   }
 
   ctx.setTransform(1,0,0,1,0,0);
-  bannerX = (state === 'done' && resultSide === 'side') ? Math.round(W*0.46) + 14 : 20;
+  bannerX = (state === 'done' && resultSide === 'side') ? Math.round(doneBox.x) + 14 : 20;
   drawStatus();
   requestAnimationFrame(frame);
 }
@@ -1317,7 +1421,10 @@ fire(['nextTop'], () => newRound(false));
 fire(['retryTop'], () => newRound(true));
 fire(['zIn'],  () => setZoom(zoom + 0.2));
 fire(['zOut'], () => setZoom(zoom - 0.2));
-fire(['zFit'], () => { panX = panY = 0; setZoom(1); });
+fire(['zFit'], () => {
+  panX = panY = 0;
+  setZoom(window.matchMedia && window.matchMedia('(max-width:620px)').matches ? 1.2 : 1);
+});
 
 // ctrl/cmd/shift + wheel zooms; a plain wheel still scrolls the page
 cv.addEventListener('wheel', e => {
@@ -1372,14 +1479,18 @@ cv.onclick = () => {
   else signalLeftNow();
 };
 
-window.addEventListener('resize', () => {
+function relayout(){
   if (state !== 'done') return;
-  const want = cv.clientWidth >= 620 ? 'side' : 'bottom';
-  if (want === resultSide) return;
-  verdict.classList.remove('side','bottom');
-  resultSide = want;
-  verdict.classList.add(resultSide);
-});
+  const want = panelMode();
+  if (want !== resultSide){
+    verdict.classList.remove('side','bottom','below');
+    resultSide = want;
+    verdict.classList.add(resultSide);
+  }
+  measurePanel();
+}
+window.addEventListener('resize', relayout);
+window.addEventListener('orientationchange', () => setTimeout(relayout, 180));
 
 window.addEventListener('keydown', e => {
   if (e.key === 'n' || e.key === 'N'){ newRound(false); return; }
@@ -1402,7 +1513,9 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'd' || e.key === 'D') setSignal('right');
 });
 
-setZoom(1);
+// a phone screen shows the map small, so start it pulled in a little
+const small = window.matchMedia && window.matchMedia('(max-width:620px)').matches;
+setZoom(small ? 1.2 : 1);
 newRound();
 requestAnimationFrame(frame);
 })();
